@@ -1,6 +1,6 @@
 {
   "name": "@ronaldzav/local-storage",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "Local storage system for your nodejs application",
   "main": "src/main.js",
   "repository": "https://github.com/RonaldZav/local-storage.git",

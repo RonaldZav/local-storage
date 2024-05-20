@@ -6,7 +6,8 @@ class Database {
         this.folderPath = '';
         this.debug = false;
         this.name = "global";
-        this.data = {};
+        this._data = {};
+        this.dataLoaded = false;
     }
 
     setFolder(folderPath) {
@@ -21,7 +22,50 @@ class Database {
 
     setName(name) {
         this.name = name;
+        this.loadData();
         return this;
+    }
+
+    get data() {
+        if (!this.dataLoaded) {
+            this.loadData();
+        }
+        return this._data;
+    }
+
+    set data(value) {
+        this._data = value;
+    }
+
+    loadData() {
+        try {
+            if (!this.folderPath) {
+                throw new Error('No folder path set. Use setFolder() to set the storage folder path.');
+            }
+
+            if (!this.name) {
+                throw new Error('No name set. Use setName() to set the storage file path.');
+            }
+
+            const filePath = path.resolve(this.folderPath, `${this.name}.json`);
+
+            if (fs.existsSync(filePath)) {
+                const fileContent = fs.readFileSync(filePath, 'utf8');
+                this._data = JSON.parse(fileContent);
+            } else {
+                this._data = {};
+            }
+            this.dataLoaded = true;
+
+            if (this.debug) {
+                console.log('Data loaded successfully:', this._data);
+            }
+        } catch (error) {
+            if (this.debug) {
+                console.error('[@Database] Error loading data:', error.message);
+            }
+            this._data = {};
+        }
     }
 
     save() {
@@ -40,13 +84,14 @@ class Database {
                 fs.mkdirSync(this.folderPath, { recursive: true });
             }
 
-            fs.writeFileSync(filePath, JSON.stringify(this.data, null, 2), 'utf8');
-            if(this.debug) { log('Data saved successfully:', "log");
-                console.log(this.data);
+            fs.writeFileSync(filePath, JSON.stringify(this._data, null, 2), 'utf8');
+            if (this.debug) {
+                console.log('Data saved successfully:', this._data);
             }
         } catch (error) {
-            if(this.debug) log('[@Database] Error:', "error");
-            console.log(error.message);
+            if (this.debug) {
+                console.error('[@Database] Error saving data:', error.message);
+            }
         }
     }
 }
