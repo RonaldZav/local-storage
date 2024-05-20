@@ -23,7 +23,7 @@ You can use the latest version of `local-storage` setting this in your package.j
 ## Usage
 
 ```js
-const { Database } = require('./src/main');
+const { Database } = require('@ronaldzav/local-storage');
 
 let myFirstDB = new Database()
 .setFolder('./storage')
