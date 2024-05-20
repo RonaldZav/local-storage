@@ -6,6 +6,19 @@
 ```bash
 npm install @ronaldzav/local-storage
 ```
+If you are using yarn:
+
+```bash
+yarn add @ronaldzav/local-storage
+```
+
+You can use the latest version of `local-storage` setting this in your package.json:
+
+```bash
+    "dependencies": {
+      "@ronaldzav/local-storage": "github:ronaldzav/local-storage"
+    }
+```
 
 ## Usage
 
