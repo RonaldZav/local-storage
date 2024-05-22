@@ -94,6 +94,36 @@ class Database {
             }
         }
     }
+
+    find(filterFunction) {
+        if (!this.dataLoaded) {
+            this.loadData();
+        }
+    
+        const matches = [];
+    
+        for (const key in this._data) {
+            if (this._data.hasOwnProperty(key)) {
+                const element = this._data[key];
+                if (Array.isArray(element)) {
+                    for (const subElement of element) {
+                        if (filterFunction(subElement)) {
+                            matches.push(subElement);
+                        }
+                    }
+                } else {
+                    if (filterFunction(element)) {
+                        matches.push(element);
+                    }
+                }
+            }
+        }
+    
+        return matches;
+    }
+    
+    
+
 }
 
 module.exports = Database;

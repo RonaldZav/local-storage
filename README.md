@@ -30,9 +30,15 @@ let myFirstDB = new Database()
 .setName('guild-123')
 .setDebug(true);
 
-myFirstDB.data = { customdata: 'test' };
+myFirstDB.data = { 
+  "1": { "name": "Mario", "age": 10 }, 
+  "2": { "name": "Maria", "age": 10 }, 
+  "3": { "name": "Luigi", "age": 10 } 
+  };
 
-myFirstDB.save();
+myFirstDB.save(); // Save the database
+
+console.log(myFirstDB.find(element => element.name == "Mario")); // Output: [ { name: 'Mario', age: 10 } ]
 ```
 
 ## API
@@ -56,3 +62,9 @@ Set the debug mode.
 #### save()
 
 Save the database.
+
+#### find(filterFunction)
+
+Find an element in the database.
+
+
