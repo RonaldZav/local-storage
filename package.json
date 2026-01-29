@@ -1,6 +1,6 @@
 {
   "name": "@ronaldzav/local-storage",
-  "version": "1.0.3",
+  "version": "2.0.0",
   "description": "Local storage system for your nodejs application",
   "main": "src/main.js",
   "repository": "https://github.com/RonaldZav/local-storage.git",
@@ -8,7 +8,6 @@
   "license": "Apache-2.0",
   "private": false,
   "dependencies": {
-    "chalk": "4.1.2",
     "moment": "2.29.4"
   },
   "scripts": {

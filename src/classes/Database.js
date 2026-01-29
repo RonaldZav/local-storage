@@ -1,129 +1,167 @@
 const fs = require('fs');
 const path = require('path');
+const crypto = require('crypto');
+
+class Collection {
+    constructor(dbPath, name) {
+        this.collectionPath = path.join(dbPath, name);
+        if (!fs.existsSync(this.collectionPath)) {
+            fs.mkdirSync(this.collectionPath, { recursive: true });
+        }
+    }
+
+    _getFilePath(id) {
+        // Sanitizar ID para evitar problemas con nombres de archivo
+        const safeId = String(id).replace(/[^a-zA-Z0-9-_]/g, '_');
+        return path.join(this.collectionPath, `${safeId}.json`);
+    }
+
+    _readAll() {
+        try {
+            const files = fs.readdirSync(this.collectionPath).filter(f => f.endsWith('.json'));
+            return files.map(file => {
+                try {
+                    const content = fs.readFileSync(path.join(this.collectionPath, file), 'utf8');
+                    return JSON.parse(content);
+                } catch (e) { return null; }
+            }).filter(d => d);
+        } catch (e) {
+            return [];
+        }
+    }
+
+    _matches(doc, query) {
+        for (const key in query) {
+            if (doc[key] !== query[key]) return false;
+        }
+        return true;
+    }
+
+    async findOne(query) {
+        // Optimización: si la query es solo por _id, vamos directo al archivo
+        if (Object.keys(query).length === 1 && query._id) {
+            const filePath = this._getFilePath(query._id);
+            if (fs.existsSync(filePath)) {
+                try {
+                    const doc = JSON.parse(fs.readFileSync(filePath, 'utf8'));
+                    return this._enhanceDoc(doc);
+                } catch (e) { return null; }
+            }
+            return null;
+        }
+
+        const docs = this._readAll();
+        const doc = docs.find(d => this._matches(d, query));
+        return doc ? this._enhanceDoc(doc) : null;
+    }
+
+    async find(query = {}) {
+        const docs = this._readAll();
+        const filtered = docs.filter(d => this._matches(d, query));
+        return {
+            toArray: async () => filtered.map(d => this._enhanceDoc(d))
+        };
+    }
+
+    async insertOne(doc) {
+        if (!doc._id) doc._id = crypto.randomUUID();
+        const filePath = this._getFilePath(doc._id);
+        
+        // Guardar archivo
+        fs.writeFileSync(filePath, JSON.stringify(doc, null, 2));
+        
+        return { acknowledged: true, insertedId: doc._id };
+    }
+
+    async updateOne(query, update) {
+        const doc = await this.findOne(query);
+        if (doc) {
+            if (update.$set) {
+                Object.assign(doc, update.$set);
+            } else {
+                Object.assign(doc, update);
+            }
+            
+            // Guardar cambios
+            const filePath = this._getFilePath(doc._id);
+            const { save, ...dataToSave } = doc;
+            fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2));
+            
+            return { acknowledged: true, modifiedCount: 1 };
+        }
+        return { acknowledged: true, modifiedCount: 0 };
+    }
+
+    async deleteOne(query) {
+        const doc = await this.findOne(query);
+        if (doc && doc._id) {
+            const filePath = this._getFilePath(doc._id);
+            if (fs.existsSync(filePath)) {
+                fs.unlinkSync(filePath);
+                return { acknowledged: true, deletedCount: 1 };
+            }
+        }
+        return { acknowledged: true, deletedCount: 0 };
+    }
+
+    _enhanceDoc(doc) {
+        // Definir save() como propiedad no enumerable para que no se guarde en el JSON
+        Object.defineProperty(doc, 'save', {
+            value: async () => {
+                const filePath = this._getFilePath(doc._id);
+                const { save, ...dataToSave } = doc;
+                fs.writeFileSync(filePath, JSON.stringify(dataToSave, null, 2));
+                return doc;
+            },
+            configurable: true,
+            writable: true,
+            enumerable: false
+        });
+        return doc;
+    }
+}
+
+class Db {
+    constructor(basePath) {
+        this.basePath = basePath;
+        if (!fs.existsSync(this.basePath)) {
+            fs.mkdirSync(this.basePath, { recursive: true });
+        }
+    }
+
+    collection(name) {
+        return new Collection(this.basePath, name);
+    }
+}
 
 class Database {
-    constructor() {
-        this.folderPath = '';
-        this.debug = false;
-        this.name = "global";
-        this._data = {};
-        this.dataLoaded = false;
-    }
-
-    setFolder(folderPath) {
-        this.folderPath = folderPath;
-        return this;
-    }
-
-    setDebug(debug) {
-        this.debug = debug;
-        return this;
-    }
-
-    setName(name) {
-        this.name = name;
-        this.loadData();
-        return this;
-    }
-
-    get data() {
-        if (!this.dataLoaded) {
-            this.loadData();
+    constructor(uri) {
+        this.uri = uri;
+        this.dbName = 'default';
+        
+        if (uri && uri.startsWith('localstorage://')) {
+            this.dbName = uri.split('localstorage://')[1];
         }
-        return this._data;
+        
+        // Ruta base: ./localstorage/<dbName>
+        this.dbPath = path.join(process.cwd(), 'localstorage', this.dbName);
     }
 
-    set data(value) {
-        this._data = value;
-    }
-
-    loadData() {
-        try {
-            if (!this.folderPath) {
-                throw new Error('No folder path set. Use setFolder() to set the storage folder path.');
-            }
-
-            if (!this.name) {
-                throw new Error('No name set. Use setName() to set the storage file path.');
-            }
-
-            const filePath = path.resolve(this.folderPath, `${this.name}.json`);
-
-            if (fs.existsSync(filePath)) {
-                const fileContent = fs.readFileSync(filePath, 'utf8');
-                this._data = JSON.parse(fileContent);
-            } else {
-                this._data = {};
-            }
-            this.dataLoaded = true;
-
-            if (this.debug) {
-                console.log('Data loaded successfully:', this._data);
-            }
-        } catch (error) {
-            if (this.debug) {
-                console.error('[@Database] Error loading data:', error.message);
-            }
-            this._data = {};
+    async connect() {
+        if (!fs.existsSync(this.dbPath)) {
+            fs.mkdirSync(this.dbPath, { recursive: true });
         }
     }
 
-    save() {
-        try {
-            if (!this.folderPath) {
-                throw new Error('No folder path set. Use setFolder() to set the storage folder path.');
-            }
-
-            if (!this.name) {
-                throw new Error('No name set. Use setName() to set the storage file path.');
-            }
-
-            const filePath = path.resolve(this.folderPath, `${this.name}.json`);
-
-            if (!fs.existsSync(this.folderPath)) {
-                fs.mkdirSync(this.folderPath, { recursive: true });
-            }
-
-            fs.writeFileSync(filePath, JSON.stringify(this._data, null, 2), 'utf8');
-            if (this.debug) {
-                console.log('Data saved successfully:', this._data);
-            }
-        } catch (error) {
-            if (this.debug) {
-                console.error('[@Database] Error saving data:', error.message);
-            }
+    db(name) {
+        // Si se pasa un nombre, se usa ese subdirectorio, si no, se usa el de la URI
+        // Nota: En mongo client.db('otro') cambia de DB. Aquí haremos lo mismo.
+        if (name) {
+            const newPath = path.join(process.cwd(), 'localstorage', name);
+            return new Db(newPath);
         }
+        return new Db(this.dbPath);
     }
-
-    find(filterFunction) {
-        if (!this.dataLoaded) {
-            this.loadData();
-        }
-    
-        const matches = [];
-    
-        for (const key in this._data) {
-            if (this._data.hasOwnProperty(key)) {
-                const element = this._data[key];
-                if (Array.isArray(element)) {
-                    for (const subElement of element) {
-                        if (filterFunction(subElement)) {
-                            matches.push(subElement);
-                        }
-                    }
-                } else {
-                    if (filterFunction(element)) {
-                        matches.push(element);
-                    }
-                }
-            }
-        }
-    
-        return matches;
-    }
-    
-    
-
 }
 
 module.exports = Database;
